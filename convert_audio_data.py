@@ -97,7 +97,7 @@ def get_args():
     )
     parser.add_argument(
         "--resume",
-        type=bool
+        type=bool,
         required=False
     )
     parser.add_argument(
