@@ -1,5 +1,5 @@
 import os 
-import logger
+import logging
 import asyncio
 import argparse
 from pathlib import Path  
@@ -15,7 +15,7 @@ def convert_to_other_format(input_file, output_file, **ffmpeg_kwargs):
         ffmpeg.run(stream, quiet=True, capture_stdout=True, capture_stderr=True)
         return True 
     except ffmpeg.Error as e:
-        logger.Error(f"Error {e}")
+        logging.Error(f"Error {e}")
     return False 
 
 def find_files(root_directory, file_suffix) -> List[Path]:
@@ -100,4 +100,4 @@ if __name__ == "__main__":
         file_suffix=file_suffix,
         **ffmpeg_kwargs
     )
-    
+
