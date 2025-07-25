@@ -5,17 +5,17 @@ import argparse
 from pathlib import Path  
 from typing import List, Any
 
-import soundfile, ffmpeg, torchaudio
+import soundfile, ffmpeg
 
 
 def convert_to_other_format(input_file, output_file,  **ffmpeg_kwargs):
     try:
         stream = ffmpeg.input(input_file)
         stream = ffmpeg.output(stream, output_file, **ffmpeg_kwargs)
-        ffmpeg.run(stream, quiet=True, capture_stdout=True, capture_stderr=True)
+        ffmpeg.run(stream, quiet=True, capture_stdout=True, capture_stderr=True, overwrite_output=True)
         return True 
     except ffmpeg.Error as e:
-        logging.Error(f"Error {e}")
+        logging.error(f"Error {e}")
     return False 
 
 async def convert_to_other_format_async(input_file, output_file, semaphore, **ffmpeg_kwargs):
@@ -32,7 +32,7 @@ def find_files(root_directory, file_suffix) -> List[Path]:
     return globbed
 
 
-def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, concurrency_limit, **ffmpeg_kwargs):
+async def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, concurrency_limit, **ffmpeg_kwargs):
     if not output_format.startswith("."):
         output_format = "." + output_format
 
@@ -56,7 +56,7 @@ def perform_conversion_concurrently(root_directory: str, output_directory: str, 
         )
     print("Running conversion tasks asynchronously")
     
-    asyncio.run(asyncio.gather(*tasks))
+    await asyncio.gather(*tasks)
 
 
 def get_args():
@@ -118,12 +118,14 @@ if __name__ == "__main__":
     concurrency_limit = parsed.concurrency_limit or 64
     ffmpeg_kwargs = parsed.ffmpeg_kwargs or {}
 
-    perform_conversion_concurrently(
+    asyncio.run(
+        perform_conversion_concurrently(
         root_directory=source_directory,
         output_directory=output_directory,
         file_suffix=file_suffix,
         output_format=output_format,
-        concurrency_limit,
+        concurrency_limit=concurrency_limit,
         **ffmpeg_kwargs
+        )
     )
 
