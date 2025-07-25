@@ -27,7 +27,10 @@ def find_files(root_directory, file_suffix) -> List[Path]:
     return globbed
 
 
-def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, **ffmpeg_kwargs):
+def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, **ffmpeg_kwargs):
+    if not output_format.startswith("."):
+        output_format = "." + output_format
+
     # find the files 
     all_files = find_files(root_directory, file_suffix)
     print(f"Found {len(all_files)} files")
@@ -40,7 +43,7 @@ def perform_conversion_concurrently(root_directory: str, output_directory: str, 
         tasks.append(
             convert_to_other_format(
                 str(file),
-                os.path.join(output_directory, file.name),
+                os.path.join(output_directory, file.with_suffix(output_format)),
                 **ffmpeg_kwargs
             )
         )
@@ -76,6 +79,11 @@ def get_args():
         required=True 
     )
     parser.add_argument(
+        "--output_format",
+        type=str,
+        required=True
+    )
+    parser.add_argument(
         "--ffmpeg_kwargs",
         type=parse_dict,
         help="Dictionary in Python syntax (e.g., \"{'key1': 'value1', 'key2': 42}\")",
@@ -89,15 +97,17 @@ if __name__ == "__main__":
 
     parsed = args.parse_args()
 
-    source_directory = parsed['source_directory']
-    output_directory = parsed['output_directory']
-    file_suffix = parsed['file_suffix']
-    ffmpeg_kwargs = parsed.get('ffmpeg_kwargs', {})
-
+    source_directory = parsed.source_directory
+    output_directory = parsed.output_directory
+    file_suffix = parsed.file_suffix
+    output_format = parsed.output_format
+    ffmpeg_kwargs = parsed.ffmpeg_kwargs or {}
+    
     perform_conversion_concurrently(
         root_directory=source_directory,
         output_directory=output_directory,
         file_suffix=file_suffix,
+        output_format=output_format,
         **ffmpeg_kwargs
     )
 
