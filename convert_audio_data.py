@@ -8,7 +8,7 @@ from typing import List, Any
 import soundfile, ffmpeg, torchaudio
 
 
-def convert_to_other_format(input_file, output_file, **ffmpeg_kwargs):
+def convert_to_other_format(input_file, output_file,  **ffmpeg_kwargs):
     try:
         stream = ffmpeg.input(input_file)
         stream = ffmpeg.output(stream, output_file, **ffmpeg_kwargs)
@@ -17,6 +17,11 @@ def convert_to_other_format(input_file, output_file, **ffmpeg_kwargs):
     except ffmpeg.Error as e:
         logging.Error(f"Error {e}")
     return False 
+
+async def convert_to_other_format_async(input_file, output_file, semaphore, **ffmpeg_kwargs):
+    async with semaphore:
+        convert_to_other_format(input_file, output_file, **ffmpeg_kwargs)
+
 
 def find_files(root_directory, file_suffix) -> List[Path]:
     if not file_suffix.startswith("."):
@@ -27,7 +32,7 @@ def find_files(root_directory, file_suffix) -> List[Path]:
     return globbed
 
 
-def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, **ffmpeg_kwargs):
+def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, concurrency_limit, **ffmpeg_kwargs):
     if not output_format.startswith("."):
         output_format = "." + output_format
 
@@ -39,14 +44,18 @@ def perform_conversion_concurrently(root_directory: str, output_directory: str, 
 
     # Setup tasks 
     tasks = []
+    semaphore = asyncio.Semaphore(concurrency_limit)
     for file in all_files:
         tasks.append(
-            convert_to_other_format(
+            convert_to_other_format_async(
                 str(file),
                 os.path.join(output_directory, file.with_suffix(output_format)),
+                semaphore,
                 **ffmpeg_kwargs
             )
         )
+    print("Running conversion tasks asynchronously")
+    
     asyncio.run(asyncio.gather(*tasks))
 
 
@@ -84,6 +93,11 @@ def get_args():
         required=True
     )
     parser.add_argument(
+        "--concurrency_limit",
+        type=int,
+        required=False
+    )
+    parser.add_argument(
         "--ffmpeg_kwargs",
         type=parse_dict,
         help="Dictionary in Python syntax (e.g., \"{'key1': 'value1', 'key2': 42}\")",
@@ -101,13 +115,15 @@ if __name__ == "__main__":
     output_directory = parsed.output_directory
     file_suffix = parsed.file_suffix
     output_format = parsed.output_format
+    concurrency_limit = parsed.concurrency_limit or 64
     ffmpeg_kwargs = parsed.ffmpeg_kwargs or {}
-    
+
     perform_conversion_concurrently(
         root_directory=source_directory,
         output_directory=output_directory,
         file_suffix=file_suffix,
         output_format=output_format,
+        concurrency_limit,
         **ffmpeg_kwargs
     )
 
