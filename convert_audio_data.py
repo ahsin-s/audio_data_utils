@@ -7,6 +7,8 @@ from typing import List, Any
 
 import soundfile, ffmpeg
 
+from helpers import find_files
+
 
 def convert_to_other_format(input_file, output_file,  **ffmpeg_kwargs):
     try:
@@ -23,16 +25,8 @@ async def convert_to_other_format_async(input_file, output_file, semaphore, **ff
         convert_to_other_format(input_file, output_file, **ffmpeg_kwargs)
 
 
-def find_files(root_directory, file_suffix) -> List[Path]:
-    if not file_suffix.startswith("."):
-        file_suffix = "." + file_suffix
-    p = Path(root_directory)
-    globbed = list(p.glob(f"**/*{file_suffix}"))
 
-    return globbed
-
-
-async def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, concurrency_limit, **ffmpeg_kwargs):
+async def perform_conversion_concurrently(root_directory: str, output_directory: str, file_suffix: str, output_format: str, concurrency_limit:int, resume: bool, **ffmpeg_kwargs):
     if not output_format.startswith("."):
         output_format = "." + output_format
 
@@ -46,10 +40,14 @@ async def perform_conversion_concurrently(root_directory: str, output_directory:
     tasks = []
     semaphore = asyncio.Semaphore(concurrency_limit)
     for file in all_files:
+        output_file = os.path.join(output_directory, file.with_suffix(output_format))
+        if resume and os.path.exists(output_file):
+            # skip since it exists and "resume" option is True
+            continue
         tasks.append(
             convert_to_other_format_async(
                 str(file),
-                os.path.join(output_directory, file.with_suffix(output_format)),
+                output_file,
                 semaphore,
                 **ffmpeg_kwargs
             )
@@ -98,6 +96,11 @@ def get_args():
         required=False
     )
     parser.add_argument(
+        "--resume",
+        type=bool
+        required=False
+    )
+    parser.add_argument(
         "--ffmpeg_kwargs",
         type=parse_dict,
         help="Dictionary in Python syntax (e.g., \"{'key1': 'value1', 'key2': 42}\")",
@@ -116,6 +119,7 @@ if __name__ == "__main__":
     file_suffix = parsed.file_suffix
     output_format = parsed.output_format
     concurrency_limit = parsed.concurrency_limit or 64
+    resume = parsed.resume or False
     ffmpeg_kwargs = parsed.ffmpeg_kwargs or {}
 
     asyncio.run(
@@ -125,6 +129,7 @@ if __name__ == "__main__":
         file_suffix=file_suffix,
         output_format=output_format,
         concurrency_limit=concurrency_limit,
+        resume=resume
         **ffmpeg_kwargs
         )
     )
