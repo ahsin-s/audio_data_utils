@@ -50,12 +50,13 @@ async def run_resize_for_all_files_in_directory(source_directory, output_directo
             output_filepath = output_directory.joinpath(relative_path)
             if output_filepath.exists() and resume:
                 # skip
-                continue 
+                continue
+            os.makedirs(output_filepath.parent, exist_ok=True)
             tasks.append(resize_audio(
                 duration,
                 samplerate,
-                source_file,
-                output_filepath,
+                str(source_file),
+                str(output_filepath),
                 semaphore
             )) 
         await asyncio.gather(*tasks)
@@ -81,5 +82,5 @@ if __name__ == "__main__":
         args.concurrency_limit,
         args.duration,
         args.samplerate,
-        args.resume
+        False
     ))
