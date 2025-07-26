@@ -41,9 +41,10 @@ async def run_resize_for_all_files_in_directory(source_directory, output_directo
 
     all_files = find_files(str(source_directory), file_suffix)
     print(f"Found {len(all_files)} files")
-    tasks = []
+    
     semaphore = asyncio.Semaphore(concurrency_limit)
     for batch in tqdm.tqdm(chunked(all_files, 10000), total=len(all_files)//10000 + 1, desc="Processing"):
+        tasks = []
         for source_file in batch:
             relative_path = source_file.relative_to(source_directory)
             output_filepath = output_directory.joinpath(relative_path)
@@ -68,7 +69,7 @@ def get_args():
     parser.add_argument("--duration", type=int, required=True)
     parser.add_argument("--samplerate", type=int, required=True)
     parser.add_argument("--concurrency_limit", required=False, type=int, default=64)
-    parser.add_argument("--resume", required=False, type=bool, default=False)
+    parser.add_argument("--resume", required=False, type=bool, default=True)
     return parser.parse_args()
 
 if __name__ == "__main__":
