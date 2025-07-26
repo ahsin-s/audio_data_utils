@@ -129,7 +129,7 @@ if __name__ == "__main__":
         file_suffix=file_suffix,
         output_format=output_format,
         concurrency_limit=concurrency_limit,
-        resume=resume
+        resume=resume,
         **ffmpeg_kwargs
         )
     )
