@@ -82,5 +82,5 @@ if __name__ == "__main__":
         args.concurrency_limit,
         args.duration,
         args.samplerate,
-        False
+        args.resume
     ))
