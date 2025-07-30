@@ -11,6 +11,35 @@ import tqdm
 
 from helpers import find_files 
 
+def chunk_audio_data(audio_data, samplerate, target_length, output_filepath, overlap_factor=0.1):
+    audio_size = len(audio_data) 
+    # chunk with some overlap 
+    chunk_counter = 0
+    chunked_output_paths = []
+    while len(audio_data) > target_length:
+        chunk = audio_data[:target_length]
+
+        # clip remaining with some overlap
+        audio_data = audio_data[int(target_length*(1-overlap_factor))::]
+
+        # save the chunk
+        chunk_filename = Path(output_filepath).stem + "_" + str(chunk_counter)
+        chunk_output_path = Path(output_filepath).with_stem(chunk_filename)
+        sf.write(chunk_output_path, chunk, samplerate)
+        chunked_output_paths.append(str(chunk_output_path))
+        chunk_counter+=1
+    
+    # The last chunk will possibly have more overlap
+    last_chunk = audio_data[-target_length::]
+    chunk_filename = Path(output_filepath).stem + "_" + str(chunk_counter)
+    chunk_output_path = Path(output_filepath).with_stem(chunk_filename)
+    sf.write(chunk_output_path, last_chunk, samplerate)
+    chunked_output_paths.append(chunk_output_path)
+    return chunked_output_paths
+
+
+
+
 
 async def resize_audio(duration_seconds: int, expected_samplerate: int, input_filepath: str, output_filepath, semaphore):
     async with semaphore:
@@ -29,8 +58,14 @@ async def resize_audio(duration_seconds: int, expected_samplerate: int, input_fi
                 # apply the repeat logic
                 repeat_factor = int(np.ceil(target_length / current_samples))
                 x = np.tile(x, repeat_factor)
-            x = x[:target_length]  # additional validation
-            sf.write(output_filepath, x, expected_samplerate)
+                x = x[:target_length]  # additional validation
+                sf.write(output_filepath, x, expected_samplerate)
+                return output_filepath
+            else: 
+                # the audio file needs to be clipped to smaller length chunks
+
+
+
         except Exception as e:
             print(e)
 
