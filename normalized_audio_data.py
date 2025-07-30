@@ -63,9 +63,8 @@ async def resize_audio(duration_seconds: int, expected_samplerate: int, input_fi
                 return output_filepath
             else: 
                 # the audio file needs to be clipped to smaller length chunks
-
-
-
+                chunked_filepaths = chunk_audio_data(x, expected_samplerate, target_length, output_filepath)
+                return chunked_filepaths
         except Exception as e:
             print(e)
 
