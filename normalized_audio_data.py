@@ -55,26 +55,30 @@ class AudioDataUtility:
 
 
     async def chunk_audio_to_target_length(self, filepath, save_result: bool) -> List[np.array]:
-        audio_data, samplerate = sf.read(filepath)
-        if len(audio_data) > self.target_length:
-            # too short, need to apply padding or looping logic
-            audio_data = self.padding_strategy_func(audio_data)
-            chunked_audio = [audio_data]
-        else:
-            # too long, need to chunk it while maintaining the same samplerate
-            audio_size = len(audio_data) 
-            # chunk with some overlap 
-            chunked_audio = []
-            while len(audio_data) > self.target_length:
-                chunk = audio_data[:self.target_length]
-                chunked_audio.append(chunk)
-                audio_data = audio_data[int(self.target_length*(1-self.chunking_overlap_factor))::]
+        try:
+            audio_data, samplerate = sf.read(filepath)
+            if len(audio_data) > self.target_length:
+                # too short, need to apply padding or looping logic
+                audio_data = self.padding_strategy_func(audio_data)
+                chunked_audio = [audio_data]
+            else:
+                # too long, need to chunk it while maintaining the same samplerate
+                audio_size = len(audio_data) 
+                # chunk with some overlap 
+                chunked_audio = []
+                while len(audio_data) > self.target_length:
+                    chunk = audio_data[:self.target_length]
+                    chunked_audio.append(chunk)
+                    audio_data = audio_data[int(self.target_length*(1-self.chunking_overlap_factor))::]
 
-            last_chunk = audio_data[-self.target_length::]
-            chunked_audio.append(last_chunk)
-        if save_result:
-            self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
-        return chunked_audio
+                last_chunk = audio_data[-self.target_length::]
+                chunked_audio.append(last_chunk)
+            if save_result:
+                self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
+            return chunked_audio
+        except Exception as e:
+            print(f"Couldn't process {filepath}")
+            print(e)
 
     def save_chunked_audio(self, filename, chunked_audio, samplerate) -> List[str]:
         output_filepaths = []
@@ -101,7 +105,7 @@ class AudioDataUtility:
                     save_result=True
                 )
             )
-            if len(tasks) >= 128:
+            if len(tasks) >= 256:
                 await asyncio.gather(*tasks)
                 tasks = [] 
         if tasks:
