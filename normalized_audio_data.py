@@ -54,31 +54,27 @@ class AudioDataUtility:
         self.chunking_overlap_factor = factor 
 
 
-    def chunk_audio_to_target_length(self, audio_data, target_length) -> List[np.array]:
-        audio_size = len(audio_data) 
-        # chunk with some overlap 
-        chunked_audio = []
-        while len(audio_data) > target_length:
-            chunk = audio_data[:target_length]
-            chunked_audio.append(chunk)
-            audio_data = audio_data[int(target_length*(1-self.chunking_overlap_factor))::]
+    async def chunk_audio_to_target_length(self, filepath, save_result: bool) -> List[np.array]:
+        audio_data, samplerate = sf.read(filepath)
+        if len(audio_data) > self.target_length:
+            # too short, need to apply padding or looping logic
+            audio_data = self.padding_strategy_func(audio_data)
+            chunked_audio = [audio_data]
+        else:
+            # too long, need to chunk it while maintaining the same samplerate
+            audio_size = len(audio_data) 
+            # chunk with some overlap 
+            chunked_audio = []
+            while len(audio_data) > self.target_length:
+                chunk = audio_data[:self.target_length]
+                chunked_audio.append(chunk)
+                audio_data = audio_data[int(self.target_length*(1-self.chunking_overlap_factor))::]
 
-
-        last_chunk = audio_data[-target_length::]
-        chunked_audio.append(last_chunk)
+            last_chunk = audio_data[-self.target_length::]
+            chunked_audio.append(last_chunk)
+        if save_result:
+            self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
         return chunked_audio
-    
-    def repeat_audio(self, audio_data):
-        audio_size = len(audio_data)
-        repeat_factor = int(np.ceil(self.target_length / audio_size))
-        audio_data = np.tile(audio_data, repeat_factor)
-        return audio_data[:self.target_length]
-
-    def zero_pad_audio(self, audio_data):
-        zeros_needed = self.target_length - len(audio_data)
-        zeros_array = np.zeros(zeros_needed)
-        audio_data = np.concat([audio_data, zeros_array])
-        return audio_data
 
     def save_chunked_audio(self, filename, chunked_audio, samplerate) -> List[str]:
         output_filepaths = []
@@ -96,25 +92,20 @@ class AudioDataUtility:
                 output_filepaths.append(output_filepath)
         return output_filepaths
 
-    def normalize_audio_size_maintain_samplerate(self):
-        rechunked_filepaths_lookup = {}
+    async def normalize_audio_size_maintain_samplerate(self):
+        tasks = []
         for filepath in self.maybe_show_progress(self.all_source_files):
-            try:
-                audio_data, samplerate = sf.read(filepath)
-                if len(audio_data) > self.target_length:
-                    # too short, need to apply padding or looping logic
-                    audio_data = self.padding_strategy_func(audio_data)
-                    chunked_audio = [audio_data]
-                else:
-                    # too long, need to chunk it while maintaining the same samplerate
-                    chunked_audio = self.chunk_audio_to_target_length(audio_data, samplerate)
-                
-                # save 
-                saved_to = self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
-                rechunked_filepaths_lookup[filepath] = saved_to
-            except Exception as e:
-                print(f"Couldn't process {filepath}")
-                print(e)
+            tasks.append(
+                self.chunk_audio_to_target_length(
+                    filepath,
+                    save_result=True
+                )
+            )
+            if len(tasks) >= 128:
+                await asyncio.gather(*tasks)
+                tasks = [] 
+        if tasks:
+            await asyncio.gather(*tasks)
 
         print("Complete")
 
@@ -152,6 +143,18 @@ class AudioDataUtility:
         # do any remaining tasks 
         asyncio.gather(*tasks) 
         print("Complete")
+
+    def repeat_audio(self, audio_data):
+        audio_size = len(audio_data)
+        repeat_factor = int(np.ceil(self.target_length / audio_size))
+        audio_data = np.tile(audio_data, repeat_factor)
+        return audio_data[:self.target_length]
+
+    def zero_pad_audio(self, audio_data):
+        zeros_needed = self.target_length - len(audio_data)
+        zeros_array = np.zeros(zeros_needed)
+        audio_data = np.concat([audio_data, zeros_array])
+        return audio_data
         
     def maybe_show_progress(self, iterable):
         if self.show_progress_bar:
@@ -188,4 +191,4 @@ if __name__ == "__main__":
     if args.normalization_type == "resample":
         asyncio.run(audio_data_utility.normalize_audio_resample_if_needed())
     else:
-        audio_data_utility.normalize_audio_size_maintain_samplerate()
+        asyncio.run(audio_data_utility.normalize_audio_size_maintain_samplerate())
