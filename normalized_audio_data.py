@@ -1,4 +1,5 @@
 import os 
+import time
 import asyncio
 import argparse
 from pathlib import Path 
@@ -49,36 +50,44 @@ class AudioDataUtility:
         # print(f"Found {len(self.all_source_files)} files")
 
         self.chunking_overlap_factor = 0.1
+
+        self.num_files_processed = 0
+        self.process_start = time.time()
     
     def set_chunking_overlap_factor(self, factor: float): 
         self.chunking_overlap_factor = factor 
 
 
-    async def chunk_audio_to_target_length(self, filepath, save_result: bool) -> List[np.array]:
-        try:
-            audio_data, samplerate = sf.read(filepath)
-            if len(audio_data) > self.target_length:
-                # too short, need to apply padding or looping logic
-                audio_data = self.padding_strategy_func(audio_data)
-                chunked_audio = [audio_data]
-            else:
-                # too long, need to chunk it while maintaining the same samplerate
-                audio_size = len(audio_data) 
-                # chunk with some overlap 
-                chunked_audio = []
-                while len(audio_data) > self.target_length:
-                    chunk = audio_data[:self.target_length]
-                    chunked_audio.append(chunk)
-                    audio_data = audio_data[int(self.target_length*(1-self.chunking_overlap_factor))::]
+    async def chunk_audio_to_target_length(self, filepath, save_result: bool, semaphore) -> List[np.array]:
+        async with semaphore:
+            try:
+                audio_data, samplerate = sf.read(filepath)
+                if len(audio_data) > self.target_length:
+                    # too short, need to apply padding or looping logic
+                    audio_data = self.padding_strategy_func(audio_data)
+                    chunked_audio = [audio_data]
+                else:
+                    # too long, need to chunk it while maintaining the same samplerate
+                    audio_size = len(audio_data) 
+                    # chunk with some overlap 
+                    chunked_audio = []
+                    while len(audio_data) > self.target_length:
+                        chunk = audio_data[:self.target_length]
+                        chunked_audio.append(chunk)
+                        audio_data = audio_data[int(self.target_length*(1-self.chunking_overlap_factor))::]
 
-                last_chunk = audio_data[-self.target_length::]
-                chunked_audio.append(last_chunk)
-            if save_result:
-                self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
-            return chunked_audio
-        except Exception as e:
-            print(f"Couldn't process {filepath}")
-            print(e)
+                    last_chunk = audio_data[-self.target_length::]
+                    chunked_audio.append(last_chunk)
+                if save_result:
+                    self.save_chunked_audio(Path(filepath).name, chunked_audio, samplerate)
+                self.num_files_processed += 1 
+                if self.num_files_processed % 999 == 0:
+                    processing_speed = round(self.num_files_processed / (time.time() - self.process_start), 2)
+                    print(f"Completed {self.num_files_processed}, processing speed: {processing_speed} it/s, remaining: {len(self.all_source_files) - self.num_files_processed}")
+                return chunked_audio
+            except Exception as e:
+                print(f"Couldn't process {filepath}")
+                print(e)
 
     def save_chunked_audio(self, filename, chunked_audio, samplerate) -> List[str]:
         output_filepaths = []
@@ -98,19 +107,17 @@ class AudioDataUtility:
 
     async def normalize_audio_size_maintain_samplerate(self):
         tasks = []
+        semaphore = asyncio.Semaphore(150)
         for filepath in self.maybe_show_progress(self.all_source_files):
             tasks.append(
                 self.chunk_audio_to_target_length(
                     filepath,
-                    save_result=True
+                    save_result=True,
+                    semaphore=semaphore,
                 )
             )
-            if len(tasks) >= 256:
-                await asyncio.gather(*tasks)
-                tasks = [] 
-        if tasks:
-            await asyncio.gather(*tasks)
-
+        print("normalization tasks created. Running the tasks now")
+        await asyncio.gather(*tasks)
         print("Complete")
 
     async def resize_audio(self, input_filepath, output_filepath, semaphore):
