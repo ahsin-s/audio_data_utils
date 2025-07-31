@@ -45,7 +45,7 @@ class AudioDataUtility:
         os.makedirs(output_directory, exist_ok=True)
 
         print("Searching for files in the source directory (this can take some time)")
-        self.all_source_files = find_files(str(self.source_directory), file_extension, as_generator=True)
+        self.all_source_files = find_files(str(self.source_directory), file_extension, as_generator=False)
         # print(f"Found {len(self.all_source_files)} files")
 
         self.chunking_overlap_factor = 0.1
@@ -90,7 +90,7 @@ class AudioDataUtility:
         else:
             for chunknum, audiochunk in enumerate(chunked_audio):
                 # add the chunknum suffix to the original filename
-                chunk_filename = Path(filename).stem + f"_{chunknum}" + Path(filename).suffix
+                chunk_filename = Path(filename).stem + f"_part_{chunknum}" + Path(filename).suffix
                 output_filepath = os.path.join(self.output_directory, chunk_filename) 
                 sf.write(output_filepath, audiochunk, samplerate)
                 output_filepaths.append(output_filepath)
@@ -182,6 +182,8 @@ if __name__ == "__main__":
         args.file_suffix,
         target_length,
         args.samplerate,
+        concurrency_limit=args.concurrency_limit,
+        resume=args.resume,
     )
     if args.normalization_type == "resample":
         asyncio.run(audio_data_utility.normalize_audio_resample_if_needed())
